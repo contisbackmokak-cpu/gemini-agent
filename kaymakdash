@@ -1,0 +1,72 @@
+local fluent = loadstring(game:HttpGet("https://github.com/dawid-scripts/Fluent/releases/latest/download/main.lua"))()
+local window = fluent:CreateWindow({
+    Title = "yag gibi dash",
+    SubTitle = "blox fruits",
+    TabWidth = 160,
+    Size = UDim2.fromOffset(580, 460),
+    Acrylic = true,
+    Theme = "Dark",
+    MinimizeKey = Enum.KeyCode.LeftControl
+})
+
+local tabs = {
+    ana = window:AddTab({ Title = "ana menü", Icon = "home" })
+}
+
+local hiz_carpani = 50
+
+tabs.ana:AddSlider("kayma_hizi", {
+    Title = "kayma hızı",
+    Description = "ne kadar hızlı akıp gideceksin",
+    Default = 50,
+    Min = 20,
+    Max = 649,
+    Rounding = 1,
+    Callback = function(deger)
+        hiz_carpani = deger
+    end
+})
+
+local oyuncu = game.Players.LocalPlayer
+local uis = game:GetService("UserInputService")
+local rs = game:GetService("RunService")
+
+local dash_aktif = false
+
+uis.InputBegan:Connect(function(tus, islendi)
+    if tus.KeyCode == Enum.KeyCode.Q and not dash_aktif then
+        local karakter = oyuncu.Character
+        if karakter and karakter:FindFirstChild("HumanoidRootPart") and karakter:FindFirstChild("Humanoid") then
+            dash_aktif = true
+            local hrp = karakter.HumanoidRootPart
+            local yon = karakter.Humanoid.MoveDirection
+            
+            -- eger hareket etmiyorsan kameranin baktigi yone gitsin
+            if yon.Magnitude < 0.1 then
+                yon = hrp.CFrame.LookVector
+            end
+            
+            local gecen_sure = 0
+            local baglanti
+            
+            -- renderstepped ile her frame'de pürüzsüzce itiyoruz
+            baglanti = rs.RenderStepped:Connect(function(delta)
+                gecen_sure = gecen_sure + delta
+                if gecen_sure < 0.25 then -- dash animasyonu suresi
+                    hrp.CFrame = hrp.CFrame + (yon * (hiz_carpani * delta))
+                else
+                    baglanti:Disconnect()
+                end
+            end)
+            
+            task.wait(0.3) -- bekleme suresi, makine gibi spam yapma diye
+            dash_aktif = false
+        end
+    end
+end)
+
+fluent:Notify({
+    Title = "sorun cözüldü",
+    Content = "yag gibi kayiyorsun su an, bi test et.",
+    Duration = 5
+})
