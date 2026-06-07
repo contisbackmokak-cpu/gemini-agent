@@ -1,0 +1,195 @@
+-- fluent ui kütüphanesini yükleme
+local Fluent = loadstring(game:HttpGet("https://github.com/dawid-scripts/Fluent/releases/latest/download/main.lua"))()
+local SaveManager = loadstring(game:HttpGet("https://raw.githubusercontent.com/dawid-scripts/Fluent/master/Addons/SaveManager.lua"))()
+local InterfaceManager = loadstring(game:HttpGet("https://raw.githubusercontent.com/dawid-scripts/Fluent/master/Addons/InterfaceManager.lua"))()
+
+local Window = Fluent:CreateWindow({
+    Title = "TTK Helper",
+    SubTitle = "Legendary Sword Dealer Finder",
+    TabWidth = 160,
+    Size = UDim2.fromOffset(500, 320),
+    Acrylic = true,
+    Theme = "Dark",
+    MinimizeKey = Enum.KeyCode.LeftControl
+})
+
+-- sekmeleri ve değişkenleri başlatma
+local Tabs = {
+    Main = Window:AddTab({ Title = "Main", Icon = "home" }),
+    Settings = Window:AddTab({ Title = "Settings", Icon = "settings" })
+}
+
+local Options = Fluent.Options
+local TweenService = game:GetService("TweenService")
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+
+local LocalPlayer = Players.LocalPlayer
+local tweenInstance = nil
+local noclipConnection = nil
+local dealerCFrame = nil
+
+-- noclip ve tween yardımcı fonksiyonları
+local function toggleNoclip(state)
+    if state then
+        noclipConnection = RunService.Stepped:Connect(function()
+            local char = LocalPlayer.Character
+            if char then
+                for _, v in pairs(char:GetDescendants()) do
+                    if v:IsA("BasePart") and v.CanCollide then
+                        v.CanCollide = false
+                    end
+                end
+            end
+        end)
+    else
+        if noclipConnection then
+            noclipConnection:Disconnect()
+            noclipConnection = nil
+        end
+    end
+end
+
+local function stopTween()
+    if tweenInstance then
+        tweenInstance:Cancel()
+        tweenInstance = nil
+    end
+    toggleNoclip(false)
+end
+
+-- tween mantığı
+local function tweenToLocation(targetCFrame, speed)
+    local char = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
+    local hrp = char:WaitForChild("HumanoidRootPart")
+    
+    -- önceki tween varsa durdur
+    stopTween()
+    
+    local distance = (hrp.Position - targetCFrame.Position).Magnitude
+    local timeToReach = distance / speed
+    
+    local tweenInfo = TweenInfo.new(timeToReach, Enum.EasingStyle.Linear)
+    tweenInstance = TweenService:Create(hrp, tweenInfo, {CFrame = targetCFrame})
+    
+    toggleNoclip(true) -- duvarlara takılmamak için noclip açıyoruz
+    tweenInstance:Play()
+    
+    tweenInstance.Completed:Connect(function()
+        toggleNoclip(false)
+        Fluent:Notify({
+            Title = "Vardın!",
+            Content = "Legendary Sword Dealer'a ulaştın.",
+            Duration = 5
+        })
+    end)
+end
+
+-- satıcıyı bulma (derin tarama)
+local function findDealer()
+    local found = false
+    dealerCFrame = nil
+    
+    print("[TTK Helper - Şeffaflık Modu] Tüm harita taranıyor... F9 Konsolunu kontrol edin.")
+    
+    for _, obj in pairs(workspace:GetDescendants()) do
+        if obj:IsA("Model") then
+            -- ismi içinde 'sword' veya 'dealer' geçen her şeyi konsola yazdır
+            if string.find(string.lower(obj.Name), "sword") or string.find(string.lower(obj.Name), "dealer") then
+                print("[TTK Helper] Şüpheli obje bulundu: '" .. obj.Name .. "' - Satıcı olup olmadığı kontrol ediliyor...")
+            end
+
+            -- kesin eşleşme kontrolü
+            if obj.Name == "Legendary Sword Dealer" or obj.Name == "Sword Dealer" then
+                local hrp = obj:FindFirstChild("HumanoidRootPart") or obj:FindFirstChild("Head") or obj.PrimaryPart
+                if hrp then
+                    dealerCFrame = hrp.CFrame
+                    found = true
+                    print("[TTK Helper] KESİN EŞLEŞME! Legendary Sword Dealer bulundu. Koordinat: " .. tostring(dealerCFrame.Position))
+                    break
+                end
+            end
+        end
+    end
+    
+    if not found then
+        print("[TTK Helper] Tarama tamamlandı. Sunucudaki on binlerce obje arasında 'Legendary Sword Dealer' KESİNLİKLE bulunamadı.")
+    end
+    
+    return found
+end
+
+-- arayüz bileşenleri
+local StatusParagraph = Tabs.Main:AddParagraph({
+    Title = "Satıcı Durumu",
+    Content = "Durum: Kontrol Edilmedi\nLütfen kontrol butonuna basın."
+})
+
+Tabs.Main:AddButton({
+    Title = "Satıcıyı Kontrol Et",
+    Description = "Sunucuda Legendary Sword Dealer olup olmadığını denetler.",
+    Callback = function()
+        Window:Dialog({
+            Title = "Kontrol Ediliyor",
+            Content = "Harita taranıyor, lütfen bekleyin...",
+            Buttons = {
+                {
+                    Title = "Tamam",
+                    Callback = function()
+                        local isFound = findDealer()
+                        if isFound then
+                            StatusParagraph:SetDesc("Durum: SUNUCUDA BULUNDU! 🟢\nKonum: " .. tostring(math.floor(dealerCFrame.X)) .. ", " .. tostring(math.floor(dealerCFrame.Y)) .. ", " .. tostring(math.floor(dealerCFrame.Z)))
+                            Fluent:Notify({ Title = "Bulundu!", Content = "Satıcı bu sunucuda var!", Duration = 5 })
+                        else
+                            StatusParagraph:SetDesc("Durum: SUNUCUDA YOK 🔴\nBaşka bir sunucuya (Server Hop) geçmeyi dene.")
+                            Fluent:Notify({ Title = "Bulunamadı", Content = "Satıcı maalesef bu sunucuda yok.", Duration = 5 })
+                        end
+                    end
+                }
+            }
+        })
+    end
+})
+
+-- ışınlanma ve hız kontrolleri
+local SpeedSlider = Tabs.Main:AddSlider("TweenSpeed", {
+    Title = "Tween (Uçuş) Hızı",
+    Description = "Dealer'a giderken kullanılacak hız",
+    Default = 300,
+    Min = 50,
+    Max = 500,
+    Rounding = 1,
+    Callback = function(Value)
+        -- değer değiştiğinde sadece değişkende güncelleniyor
+    end
+})
+
+Tabs.Main:AddButton({
+    Title = "Satıcıya Git (Tween)",
+    Description = "Eğer satıcı bulunduysa ayarlanan hızda ona uçarsın.",
+    Callback = function()
+        if dealerCFrame then
+            Fluent:Notify({ Title = "Yola Çıkıldı", Content = "Satıcıya doğru " .. tostring(SpeedSlider.Value) .. " hızında uçuluyor.", Duration = 3 })
+            tweenToLocation(dealerCFrame, SpeedSlider.Value)
+        else
+            Fluent:Notify({ Title = "Hata", Content = "Önce satıcıyı bulmalısın (veya sunucuda yok)!", Duration = 3 })
+        end
+    end
+})
+
+Tabs.Main:AddButton({
+    Title = "Tween'i Durdur",
+    Description = "Uçuşu acil olarak iptal eder.",
+    Callback = function()
+        stopTween()
+        Fluent:Notify({ Title = "Durduruldu", Content = "Uçuş iptal edildi.", Duration = 3 })
+    end
+})
+
+-- scripti sonlandırma
+Window:SelectTab(1)
+Fluent:Notify({
+    Title = "TTK Helper Başlatıldı",
+    Content = "Script başarıyla yüklendi. Sol Control (LCtrl) tuşu ile menüyü gizleyebilirsin.",
+    Duration = 5
+})
