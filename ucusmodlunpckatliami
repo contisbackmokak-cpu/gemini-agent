@@ -1,0 +1,186 @@
+local fluent = loadstring(game:HttpGet("https://github.com/dawid-scripts/Fluent/releases/latest/download/main.lua"))()
+local runservice = game:GetService("RunService")
+local tweenservice = game:GetService("TweenService")
+local oyuncu = game:GetService("Players").LocalPlayer
+local repstorage = game:GetService("ReplicatedStorage")
+
+local window = fluent:CreateWindow({
+    Title = "nurullah'ın manyak hilesi",
+    SubTitle = "v565 - uçuş modlu npc katliamı",
+    TabWidth = 130,
+    Size = UDim2.fromOffset(350, 260),
+    Acrylic = true,
+    Theme = "Dark",
+    MinimizeKey = Enum.KeyCode.LeftControl
+})
+
+local sekme = window:AddTab({ Title = "katliam", Icon = "skull" })
+local seyahat_sekme = window:AddTab({ Title = "seyahat", Icon = "map" })
+
+local ayarlar = { cek = false, vur = false, mesafe = 300, uculuyor = false }
+
+sekme:AddToggle("mob_cek", { 
+    Title = "tüm npcleri kafama çek", 
+    Default = false, 
+    Callback = function(v) ayarlar.cek = v end 
+})
+
+sekme:AddToggle("oto_vur", { 
+    Title = "min gaming ile yok et", 
+    Default = false, 
+    Callback = function(v) ayarlar.vur = v end 
+})
+
+sekme:AddSlider("mesafe_ayar", { 
+    Title = "çekme mesafesi", 
+    Default = 300, 
+    Min = 50, 
+    Max = 1500, 
+    Rounding = 1, 
+    Callback = function(v) ayarlar.mesafe = v end 
+})
+
+-- uçuş fonksiyonu
+local function ucusa_gec(hedef_pos)
+    local char = oyuncu.Character
+    local hrp = char and char:FindFirstChild("HumanoidRootPart")
+    if not hrp then return end
+
+    ayarlar.uculuyor = true
+    
+    local mesafe = (hrp.Position - hedef_pos).Magnitude
+    local hiz = mesafe / 300 -- saniyede 300 stud
+    
+    local tween_ayari = TweenInfo.new(hiz, Enum.EasingStyle.Linear)
+    local ucus = tweenservice:Create(hrp, tween_ayari, {CFrame = CFrame.new(hedef_pos)})
+    
+    -- yerçekimi bozmasın diye havada tutma
+    local bv = Instance.new("BodyVelocity")
+    bv.Velocity = Vector3.new(0, 0, 0)
+    bv.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
+    bv.Parent = hrp
+    
+    ucus:Play()
+    ucus.Completed:Wait()
+    
+    if bv then bv:Destroy() end
+    ayarlar.uculuyor = false
+end
+
+seyahat_sekme:AddButton({
+    Title = "hot and cold adasına yardır",
+    Callback = function()
+        -- second sea hot and cold koordinatı ameka, kayarsa elinle düzeltirsin
+        local hot_cold_merkez = Vector3.new(-5870, 16, -5057) 
+        
+        fluent:Notify({Title = "kemerini bağla", Content = "300 hızla uçuşa geçiyoruz, oyun çökerse roblox de geç.", Duration = 3})
+        ucusa_gec(hot_cold_merkez)
+    end
+})
+
+local function yakindaki_npcler()
+    local npcler = {}
+    for _, klasor_adi in pairs({"Enemies", "NPCs", "Mob", "Monsters"}) do
+        local klasor = workspace:FindFirstChild(klasor_adi)
+        if klasor then
+            for _, npc in pairs(klasor:GetChildren()) do
+                table.insert(npcler, npc)
+            end
+        end
+    end
+    
+    if #npcler == 0 then
+        for _, obj in pairs(workspace:GetChildren()) do
+            if obj:IsA("Model") and obj:FindFirstChild("Humanoid") and obj ~= oyuncu.Character then
+                table.insert(npcler, obj)
+            end
+        end
+    end
+    return npcler
+end
+
+local function min_gaming_patlat(hedef_listesi, ana_hedef)
+    local char = oyuncu.Character
+    if not char then return end
+
+    local eldeki_silah = char:FindFirstChildOfClass("Tool")
+    if not eldeki_silah then
+        local canta_silah = oyuncu.Backpack:FindFirstChildOfClass("Tool")
+        if canta_silah then
+            char.Humanoid:EquipTool(canta_silah)
+        else
+            return
+        end
+    end
+
+    pcall(function()
+        local reg_attack = repstorage.Modules.Net["RE/RegisterAttack"]
+        local reg_hit = repstorage.Modules.Net["RE/RegisterHit"]
+        
+        reg_attack:FireServer(1e-9) 
+        reg_hit:FireServer(ana_hedef, hedef_listesi) 
+    end)
+end
+
+runservice.Stepped:Connect(function()
+    local char = oyuncu.Character
+    local hrp = char and char:FindFirstChild("HumanoidRootPart")
+    if not hrp then return end
+
+    -- uçarken dağa taşa takılmama noclipi
+    if ayarlar.uculuyor then
+        for _, parca in pairs(char:GetDescendants()) do
+            if parca:IsA("BasePart") then parca.CanCollide = false end
+        end
+    end
+
+    local cekilecekler = yakindaki_npcler()
+    local vurulacak_listesi = {}
+    local ana_hedef = nil
+
+    if ayarlar.cek or ayarlar.vur then
+        pcall(function()
+            if sethiddenproperty then sethiddenproperty(oyuncu, "SimulationRadius", math.huge) end
+        end)
+    end
+
+    for _, npc in pairs(cekilecekler) do
+        local e_hrp = npc:FindFirstChild("HumanoidRootPart") or npc:FindFirstChild("Head")
+        local e_hum = npc:FindFirstChild("Humanoid")
+        
+        if e_hrp and e_hum and e_hum.Health > 0 then
+            local uzaklik = (hrp.Position - e_hrp.Position).Magnitude
+            
+            if ayarlar.cek and uzaklik <= ayarlar.mesafe then
+                for _, parca in pairs(npc:GetDescendants()) do
+                    if parca:IsA("BasePart") then parca.CanCollide = false end
+                end
+                
+                e_hum:ChangeState(11)
+                e_hum.WalkSpeed = 0
+                
+                e_hrp.CFrame = hrp.CFrame * CFrame.new(0, 8, -4)
+                e_hrp.Velocity = Vector3.new(0, -0.01, 0)
+                e_hrp.Size = Vector3.new(10, 10, 10)
+                
+                pcall(function()
+                    e_hum:UnequipTools()
+                    for _, esya in pairs(npc:GetChildren()) do
+                        if esya:IsA("Tool") then esya:Destroy() end
+                    end
+                end)
+            end
+
+            if ayarlar.vur and uzaklik <= 60 then
+                table.insert(vurulacak_listesi, {npc, e_hrp})
+                ana_hedef = e_hrp
+            end
+        end
+    end
+
+    if ayarlar.vur and ana_hedef and #vurulacak_listesi > 0 then
+        min_gaming_patlat(vurulacak_listesi, ana_hedef)
+    end
+end)
+
+window:SelectTab(1)
