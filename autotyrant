@@ -1,0 +1,641 @@
+local Fluent = loadstring(game:HttpGet("https://github.com/dawid-scripts/Fluent/releases/latest/download/main.lua"))()
+local HttpService = game:GetService("HttpService")
+local TweenService = game:GetService("TweenService")
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local VIM = game:GetService("VirtualInputManager")
+local LocalPlayer = Players.LocalPlayer
+local UIS = game:GetService("UserInputService")
+
+local configFileName = "nurullah_v565_saf_tyrant_mingaming.json"
+local config = {
+    tweenSpeed = 220,
+    dashProtection = true,
+    fastAttackModule = false,
+    autoAura = true,
+    autoTyrant = false,
+    selectedWeapon = "Godhuman"
+}
+
+local function saveConfig()
+    if writefile then writefile(configFileName, HttpService:JSONEncode(config)) end
+end
+
+local function loadConfig()
+    if isfile and isfile(configFileName) and readfile then
+        local success, result = pcall(function() return HttpService:JSONDecode(readfile(configFileName)) end)
+        if success and result then 
+            for k, v in pairs(result) do config[k] = v end 
+        end
+    end
+end
+loadConfig()
+
+local Window = Fluent:CreateWindow({
+    Title = "nurullah'ın saf hilesi",
+    SubTitle = "v565.4 - godhuman mutlak kilit",
+    TabWidth = 160,
+    Size = UDim2.fromOffset(550, 420),
+    Acrylic = true,
+    Theme = "Dark",
+    MinimizeKey = Enum.KeyCode.LeftControl
+})
+
+local Tabs = {
+    Main = Window:AddTab({ Title = "tyrant & farm", Icon = "skull" }),
+    Changelogs = Window:AddTab({ Title = "changelogs (oku lan)", Icon = "scroll" })
+}
+
+local StatusBar = Tabs.Main:AddParagraph({
+    Title = "anlık durum (canlı)",
+    Content = "boşta bekliyor koçum..."
+})
+
+local function setStatus(text)
+    if StatusBar then
+        StatusBar:SetDesc(text)
+    end
+end
+
+Tabs.Changelogs:AddParagraph({
+    Title = "v14 - Godhuman Mutlak Kilit",
+    Content = "Tyrant çağırırken Godhuman X atıldığında karakter ileri fırlıyor veya kayabiliyordu. Artık X şarjlanırken ve bırakıldığında karakter RunService ile yere tamamen çivileniyor. Milimetre kıpırdamak yok."
+})
+
+local autoClickToggleState = false
+local isPlayerTweening = false
+local autoFarmKills = false
+local autoTyrantMode = false
+local isSummoningTyrant = false -- YENİ: Çağırma aşamasında mıyız kontrolü
+local currentFarmTargetMob = "(hepsi)"
+local lockedCFrame = nil 
+local cachedEyes = {} 
+local broughtMobs = {} 
+
+local tikiSpawns = {
+    Vector3.new(-16519.44, 114.80, 1718.84),
+    Vector3.new(-16846.13, 119.07, 1630.32),
+    Vector3.new(-16264.98, 53.34, 1014.60),
+    Vector3.new(-16785.49, 52.02, 1062.51)
+}
+
+local tikiMobsDict = {
+    ["Serpent Hunter"] = true,
+    ["Skull Slayer"] = true,
+    ["Sun-kissed Warrior"] = true,
+    ["Isle Champion"] = true
+}
+
+local EXACT_BOSS_NAME = "Tyrant of the Skies"
+
+local function safeTween(targetPos)
+    local char = LocalPlayer.Character
+    local hrp = char and char:FindFirstChild("HumanoidRootPart")
+    local hum = char and char:FindFirstChild("Humanoid")
+    if not hrp or not hum then return end
+
+    local dist = (hrp.Position - targetPos).Magnitude
+    if dist < 5 then return end
+
+    isPlayerTweening = true
+    hum:ChangeState(Enum.HumanoidStateType.Physics) 
+    
+    local tInfo = TweenInfo.new(dist / config.tweenSpeed, Enum.EasingStyle.Linear)
+    local t = TweenService:Create(hrp, tInfo, {CFrame = CFrame.new(targetPos)})
+    t:Play()
+    t.Completed:Wait()
+    
+    hrp.Velocity = Vector3.zero
+    hum:ChangeState(Enum.HumanoidStateType.Running)
+    hrp.CFrame = CFrame.new(targetPos) 
+    task.wait(0.1)
+    isPlayerTweening = false
+end
+
+local function equipGodhuman()
+    local char = LocalPlayer.Character
+    if not char then return end
+    local tool = LocalPlayer.Backpack:FindFirstChild("Godhuman") or char:FindFirstChild("Godhuman")
+    if tool and tool.Parent ~= char then
+        char.Humanoid:EquipTool(tool)
+    end
+end
+
+local function equipFarmWeapon()
+    local char = LocalPlayer.Character
+    if not char then return end
+    local wepName = config.selectedWeapon or "Godhuman"
+    local tool = LocalPlayer.Backpack:FindFirstChild(wepName) or char:FindFirstChild(wepName)
+    if tool and tool.Parent ~= char then
+        char.Humanoid:EquipTool(tool)
+    end
+end
+
+local function getEquippedTool(char)
+    if not char then return nil end
+    for _, v in ipairs(char:GetChildren()) do
+        if v:IsA("Tool") then return v end
+    end
+    return nil
+end
+
+local function findEnemiesInRange(targetList, enemies)
+    local char = LocalPlayer.Character
+    if not char then return nil end
+    local pos = char:GetPivot().Position
+    local mainTarget = nil
+    
+    for _, enemy in ipairs(enemies) do
+        if currentFarmTargetMob ~= "(hepsi)" and enemy.Name ~= currentFarmTargetMob then
+            continue
+        end
+        
+        if enemy:FindFirstChildOfClass("Humanoid") and enemy.Humanoid.Health > 0 then
+            local targetPart = enemy:FindFirstChild("Head") or enemy:FindFirstChild("HumanoidRootPart")
+            if targetPart and ((pos - targetPart.Position).Magnitude <= 60) then
+                table.insert(targetList, {enemy, targetPart})
+                mainTarget = targetPart
+            end
+        end
+    end
+    return mainTarget
+end
+
+local function minGamingFastAttack()
+    local char = LocalPlayer.Character
+    if not char then return end
+    
+    local toolName = config.selectedWeapon or "Godhuman"
+    local tool = LocalPlayer.Backpack:FindFirstChild(toolName) or char:FindFirstChild(toolName) or LocalPlayer.Backpack:FindFirstChildOfClass("Tool")
+    if tool and not char:FindFirstChild(tool.Name) then
+        char.Humanoid:EquipTool(tool)
+    end
+    
+    local targetList = {}
+    local enemies = workspace:FindFirstChild("Enemies")
+    if not enemies then return end
+    
+    local mainTarget = findEnemiesInRange(targetList, enemies:GetChildren())
+    if not mainTarget then return end
+    
+    local equippedTool = getEquippedTool(char)
+    if not equippedTool then return end
+    
+    pcall(function()
+        local repStorage = game:GetService("ReplicatedStorage")
+        local regAttack = repStorage:WaitForChild("Modules"):WaitForChild("Net"):WaitForChild("RE/RegisterAttack")
+        local regHit = repStorage:WaitForChild("Modules"):WaitForChild("Net"):WaitForChild("RE/RegisterHit")
+        
+        if #targetList > 0 then
+            regAttack:FireServer(1e-9) 
+            regHit:FireServer(mainTarget, targetList) 
+        end
+    end)
+end
+
+local function autoAuraTask()
+    task.spawn(function()
+        while task.wait(1) do
+            if config.autoAura then
+                pcall(function()
+                    local char = LocalPlayer.Character
+                    if char and not char:FindFirstChild("HasBuso") then
+                        local rs = game:GetService("ReplicatedStorage")
+                        if rs:FindFirstChild("Remotes") and rs.Remotes:FindFirstChild("CommF_") then
+                            rs.Remotes.CommF_:InvokeServer("Buso")
+                        end
+                    end
+                end)
+            end
+        end
+    end)
+end
+autoAuraTask()
+
+local function cacheTyrantEyes()
+    cachedEyes = {}
+    local TikiOutpost = workspace:FindFirstChild("Map") and workspace.Map:FindFirstChild("TikiOutpost")
+    if not TikiOutpost then return end
+    
+    for _, obj in pairs(TikiOutpost:GetDescendants()) do
+        if obj:IsA("BasePart") and string.find(string.lower(obj.Name), "eye") then
+            local isChar = false
+            local p = obj.Parent
+            while p and p ~= workspace do
+                if p:FindFirstChildOfClass("Humanoid") then isChar = true break end
+                p = p.Parent
+            end
+            
+            if not isChar then
+                table.insert(cachedEyes, obj)
+            end
+        end
+    end
+end
+
+local function GetGlowingEyeCount()
+    local count = 0
+    local total = #cachedEyes
+    
+    if total == 0 then return 0, 0 end
+    
+    for _, eye in ipairs(cachedEyes) do
+        if eye.Transparency < 1 then 
+            count = count + 1 
+        end
+    end
+    return count, total
+end
+
+local function holdGodhumanX()
+    setStatus("tyrant çağrılıyor! godhuman x şarjlanıyor (mutlak beton mod)...")
+    isSummoningTyrant = true -- RunService'e karakteri mühürlemesi emrini veriyoruz
+    
+    pcall(function()
+        VIM:SendKeyEvent(true, Enum.KeyCode.X, false, game)
+        for i=1, 50 do
+            if not autoTyrantMode then break end
+            
+            local enemies = workspace:FindFirstChild("Enemies")
+            if enemies and enemies:FindFirstChild(EXACT_BOSS_NAME) then
+                task.wait(0.3) 
+                break
+            end
+            
+            task.wait(0.1)
+        end
+        VIM:SendKeyEvent(false, Enum.KeyCode.X, false, game)
+        
+        setStatus("x atıldı! fps toparlanıyor, patlama efektleri bekleniyor (1.5sn)...")
+        task.wait(1.5) -- Patlama (dash) efekti bitene kadar kilitli kalmasını sağlıyor
+    end)
+    
+    isSummoningTyrant = false -- Kilidi aç
+end
+
+local function startTyrantRoutine()
+    task.spawn(function()
+        local patrolIdx = 1
+        cacheTyrantEyes()
+        
+        while autoTyrantMode do
+            local char = LocalPlayer.Character
+            local hrp = char and char:FindFirstChild("HumanoidRootPart")
+            local hum = char and char:FindFirstChild("Humanoid")
+            
+            if not hrp or not hum or hum.Health <= 0 then 
+                setStatus("öldün lan koçum, 4 saniye dirilme bekleniyor...")
+                autoFarmKills = false
+                autoClickToggleState = false
+                isSummoningTyrant = false
+                lockedCFrame = nil
+                broughtMobs = {}
+                task.wait(4) 
+                continue 
+            end
+
+            if not autoTyrantMode then break end
+
+            local enemies = workspace:FindFirstChild("Enemies")
+            if not enemies then task.wait(1) continue end
+
+            local boss = enemies:FindFirstChild(EXACT_BOSS_NAME)
+            if boss then
+                local bossHrp = boss:FindFirstChild("HumanoidRootPart")
+                local bossHum = boss:FindFirstChild("Humanoid")
+                
+                if bossHrp and bossHum and bossHum.Health > 0 then
+                    if bossHrp.Position.Magnitude < 10 then 
+                        setStatus("boss doğdu ama kordinatları bozuk (oyun laglı), bekleniyor...")
+                        task.wait(0.5)
+                        continue
+                    end
+                    
+                    setStatus("YARGI DAĞITILIYOR: " .. EXACT_BOSS_NAME .. " içinden geçiliyor!")
+                    broughtMobs = {} 
+                    equipFarmWeapon()
+                    
+                    local yOffset = 15
+                    if config.selectedWeapon == "Control-Control" then
+                        yOffset = 5
+                    end
+                    local targetCFrame = bossHrp.CFrame * CFrame.new(0, yOffset, 0)
+                    
+                    if (hrp.Position - targetCFrame.Position).Magnitude > 20 then 
+                        safeTween(targetCFrame.Position) 
+                    end
+                    
+                    if not autoTyrantMode then break end
+                    
+                    hrp.CFrame = targetCFrame
+                    lockedCFrame = targetCFrame 
+                    
+                    currentFarmTargetMob = EXACT_BOSS_NAME 
+                    autoFarmKills = true
+                    autoClickToggleState = true
+                    task.wait(0.1)
+                    continue
+                end
+            end
+
+            if currentFarmTargetMob == EXACT_BOSS_NAME then
+                currentFarmTargetMob = "(hepsi)"
+            end
+
+            local glowing, total = GetGlowingEyeCount()
+            if total > 0 and glowing == total then
+                setStatus("gözler kan çanağı! tyrant çağırma noktasına gidiliyor...")
+                autoFarmKills = false
+                autoClickToggleState = false
+                broughtMobs = {}
+                
+                local summonPos = Vector3.new(-16267.45, 153.04, 1392.07)
+                
+                if (hrp.Position - summonPos).Magnitude > 10 then safeTween(summonPos) end
+                if not autoTyrantMode then break end
+                
+                hrp.CFrame = CFrame.new(summonPos)
+                lockedCFrame = hrp.CFrame
+                
+                equipGodhuman()
+                holdGodhumanX()
+                
+                for i=1, 12 do
+                    if not autoTyrantMode then break end
+                    if enemies:FindFirstChild(EXACT_BOSS_NAME) then break end
+                    setStatus("boss aranıyor... (bekleme: " .. i .. "/12 sn)")
+                    task.wait(1)
+                end
+                continue
+            end
+
+            local closestMob = nil
+            local closestDist = math.huge
+            
+            pcall(function() if sethiddenproperty then sethiddenproperty(LocalPlayer, "SimulationRadius", math.huge) end end)
+
+            for _, enemy in pairs(enemies:GetChildren()) do
+                if tikiMobsDict[enemy.Name] then
+                    local eHrp = enemy:FindFirstChild("HumanoidRootPart")
+                    local eHum = enemy:FindFirstChild("Humanoid")
+                    if eHrp and eHum and eHum.Health > 0 then
+                        local dist = (hrp.Position - eHrp.Position).Magnitude
+                        if dist < closestDist then
+                            closestDist = dist
+                            closestMob = enemy
+                        end
+                    end
+                end
+            end
+
+            if closestMob then
+                local mainHrp = closestMob:FindFirstChild("HumanoidRootPart")
+                if mainHrp then
+                    setStatus("seyyar vakum devrede: " .. closestMob.Name .. " ve saz arkadaşları kesiliyor...")
+                    
+                    mainHrp.Anchored = false 
+                    broughtMobs = {} 
+                    
+                    table.insert(broughtMobs, {
+                        hrp = mainHrp,
+                        hum = closestMob:FindFirstChild("Humanoid"),
+                        targetCFrame = mainHrp.CFrame
+                    })
+                    
+                    local yOffset = 15
+                    if config.selectedWeapon == "Control-Control" then
+                        yOffset = 5
+                    end
+                    local targetCFrame = mainHrp.CFrame * CFrame.new(0, yOffset, 0)
+                    
+                    if (hrp.Position - targetCFrame.Position).Magnitude > 20 then safeTween(targetCFrame.Position) end
+                    if not autoTyrantMode then break end
+                    
+                    hrp.CFrame = targetCFrame
+                    lockedCFrame = targetCFrame 
+                    
+                    equipFarmWeapon()
+                    autoFarmKills = true
+                    autoClickToggleState = true
+
+                    for _, enemy in pairs(enemies:GetChildren()) do
+                        if enemy ~= closestMob and tikiMobsDict[enemy.Name] then
+                            local eHrp = enemy:FindFirstChild("HumanoidRootPart")
+                            local eHum = enemy:FindFirstChild("Humanoid")
+                            if eHrp and eHum and eHum.Health > 0 then
+                                local distToMain = (eHrp.Position - mainHrp.Position).Magnitude
+                                if distToMain <= 60 then
+                                    eHrp.Anchored = false 
+                                    for _, part in pairs(enemy:GetDescendants()) do
+                                        if part:IsA("BasePart") then part.CanCollide = false end
+                                    end
+                                    local anim = eHum:FindFirstChildOfClass("Animator")
+                                    if anim then anim:Destroy() end
+                                    
+                                    eHrp.Size = Vector3.new(10, 10, 10)
+                                    
+                                    pcall(function()
+                                        eHum:UnequipTools()
+                                        for _, item in pairs(enemy:GetChildren()) do
+                                            if item:IsA("Tool") then item:Destroy() end
+                                        end
+                                    end)
+
+                                    table.insert(broughtMobs, {
+                                        hrp = eHrp,
+                                        hum = eHum,
+                                        targetCFrame = mainHrp.CFrame
+                                    })
+                                end
+                            end
+                        end
+                    end
+                end
+            else
+                setStatus("haritada canlı tiki kalmadı, havada devriye atılıyor ameka...")
+                autoFarmKills = false
+                autoClickToggleState = false
+                broughtMobs = {}
+                local spawnPos = tikiSpawns[patrolIdx]
+                safeTween(spawnPos + Vector3.new(0, 50, 0))
+                patrolIdx = patrolIdx + 1
+                if patrolIdx > #tikiSpawns then patrolIdx = 1 end
+                
+                for i=1, 15 do
+                    if not autoTyrantMode then break end
+                    task.wait(0.1)
+                end
+            end
+            
+            task.wait(0.1)
+        end
+
+        setStatus("sistem kapalı, dinleniyoruz.")
+        autoFarmKills = false
+        autoClickToggleState = false
+        isSummoningTyrant = false
+        lockedCFrame = nil
+        broughtMobs = {}
+    end)
+end
+
+local function autoClick()
+    task.spawn(function()
+        while true do
+            if UIS:IsMouseButtonPressed(Enum.UserInputType.MouseButton1) then
+                task.wait(0.2)
+                continue
+            end
+            
+            if autoClickToggleState or autoFarmKills then
+                if config.selectedWeapon == "Control-Control" then
+                    local char = LocalPlayer.Character
+                    if char then
+                        local controlTool = char:FindFirstChild("Control-Control")
+                        if controlTool and not isPlayerTweening then
+                            local remote = controlTool:FindFirstChild("LeftClickRemote")
+                            if remote then
+                                pcall(function()
+                                    remote:FireServer(Vector3.new(0, -0.9, 0.03), 1)
+                                end)
+                            end
+                        end
+                    end
+                    task.wait(1 / 6)
+                elseif config.fastAttackModule then
+                    minGamingFastAttack()
+                    task.wait(0.05)
+                else
+                    VIM:SendMouseButtonEvent(0, 0, 0, true, game, 0)
+                    task.wait(0.05)
+                    VIM:SendMouseButtonEvent(0, 0, 0, false, game, 0)
+                    task.wait(0.05)
+                end
+            else
+                task.wait(0.1) 
+            end
+        end
+    end)
+end
+autoClick()
+
+RunService.Stepped:Connect(function()
+    local char = LocalPlayer.Character
+    local hrp = char and char:FindFirstChild("HumanoidRootPart")
+    if not hrp then return end
+
+    if isPlayerTweening or autoTyrantMode then
+        for _, part in pairs(char:GetDescendants()) do
+            if part:IsA("BasePart") then part.CanCollide = false end
+        end
+    end
+
+    -- YENİ EKLENEN: Godhuman X Çağırma aşamasında mutlak kilit (Beton Mod)
+    if isSummoningTyrant then
+        if not lockedCFrame then lockedCFrame = hrp.CFrame end
+        hrp.CFrame = lockedCFrame
+        hrp.Velocity = Vector3.zero
+        hrp.RotVelocity = Vector3.zero
+    elseif config.dashProtection and (autoClickToggleState or autoFarmKills) and not isPlayerTweening and not hrp.Anchored then
+        if not lockedCFrame then lockedCFrame = hrp.CFrame end
+        hrp.CFrame = lockedCFrame
+        hrp.Velocity = Vector3.zero
+        hrp.RotVelocity = Vector3.zero
+    else
+        lockedCFrame = nil
+    end
+
+    -- Mob Vakum Kontrolcüsü (NetworkOwner Desync Engelleme ve Anti-Knockback)
+    if autoFarmKills and broughtMobs and #broughtMobs > 0 then
+        for i = #broughtMobs, 1, -1 do
+            local mobData = broughtMobs[i]
+            if mobData.hrp and mobData.hum and mobData.hum.Health > 0 and mobData.hrp.Parent then
+                
+                for _, v in pairs(mobData.hrp:GetChildren()) do
+                    if v:IsA("BodyVelocity") or v:IsA("BodyPosition") or v:IsA("BodyGyro") or v:IsA("BodyForce") or v:IsA("LinearVelocity") or v:IsA("VectorForce") then
+                        v:Destroy()
+                    end
+                end
+
+                mobData.hrp.AssemblyLinearVelocity = Vector3.zero
+                mobData.hrp.AssemblyAngularVelocity = Vector3.zero
+                mobData.hum.PlatformStand = true
+
+                local dist = (mobData.hrp.Position - mobData.targetCFrame.Position).Magnitude
+                if dist > 40 then
+                    table.remove(broughtMobs, i)
+                    continue
+                end
+
+                mobData.hrp.CFrame = mobData.targetCFrame
+            else
+                table.remove(broughtMobs, i)
+            end
+        end
+    end
+end)
+
+local function getWeaponList()
+    local w = {}
+    for _, v in pairs(LocalPlayer.Backpack:GetChildren()) do
+        if v:IsA("Tool") then table.insert(w, v.Name) end
+    end
+    local char = LocalPlayer.Character
+    if char then
+        for _, v in pairs(char:GetChildren()) do
+            if v:IsA("Tool") then table.insert(w, v.Name) end
+        end
+    end
+    if #w == 0 then return {"Godhuman"} end
+    return w
+end
+
+local weaponDropdown = Tabs.Main:AddDropdown("FarmWeaponDropdown", {
+    Title = "farm silahı (meyve m1 vs)",
+    Values = getWeaponList(),
+    Multi = false,
+    Default = config.selectedWeapon,
+})
+
+weaponDropdown:OnChanged(function(Value)
+    config.selectedWeapon = Value
+    saveConfig()
+end)
+
+Tabs.Main:AddButton({
+    Title = "silah listesini yenile",
+    Description = "envanterindeki güncel kılıç/meyveleri bulur",
+    Callback = function()
+        weaponDropdown:SetValues(getWeaponList())
+    end
+})
+
+Tabs.Main:AddToggle("FastAttackToggle", { Title = "hızlı atak (min gaming)", Default = config.fastAttackModule, Callback = function(state) config.fastAttackModule = state; saveConfig() end })
+Tabs.Main:AddToggle("AutoAuraToggle", { Title = "oto aura (haki)", Default = config.autoAura, Callback = function(state) config.autoAura = state; saveConfig() end })
+Tabs.Main:AddToggle("DashProt", { Title = "anti-dash (geri çekme fix)", Default = config.dashProtection, Callback = function(state) config.dashProtection = state; saveConfig() end })
+
+Tabs.Main:AddToggle("TyrantModeToggle", {
+    Title = "oto tyrant & seyyar vakum",
+    Default = false,
+    Callback = function(state)
+        autoTyrantMode = state
+        config.autoTyrant = state
+        saveConfig()
+        if state then 
+            setStatus("sistem başlatıldı, fps toparlandı ameka.")
+            startTyrantRoutine()
+            Fluent:Notify({Title = "tyrant modu devrede", Content = "fps fırladı uçtu koçum.", Duration = 4})
+        else
+            setStatus("sistem kapalı, dinleniyoruz.")
+            autoFarmKills = false
+            autoClickToggleState = false
+            isSummoningTyrant = false
+            lockedCFrame = nil
+            broughtMobs = {}
+            Fluent:Notify({Title = "kapalı", Content = "sistem tamamen durdu.", Duration = 3})
+        end
+    end
+})
+
+Window:SelectTab(1)
+Fluent:Notify({Title = "nurullah v565.4", Content = "godhuman x mutlak beton mod devrede", Duration = 6})
