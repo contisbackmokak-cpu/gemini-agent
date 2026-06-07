@@ -1,0 +1,240 @@
+local fluent = loadstring(game:HttpGet("https://github.com/dawid-scripts/Fluent/releases/latest/download/main.lua"))()
+local runservice = game:GetService("RunService")
+local tweenservice = game:GetService("TweenService")
+local oyuncu = game:GetService("Players").LocalPlayer
+local repstorage = game:GetService("ReplicatedStorage")
+
+local window = fluent:CreateWindow({
+    Title = "nurullah'ın manyak hilesi",
+    SubTitle = "v566 - alttan suikast",
+    TabWidth = 130,
+    Size = UDim2.fromOffset(380, 320),
+    Acrylic = true,
+    Theme = "Dark",
+    MinimizeKey = Enum.KeyCode.LeftControl
+})
+
+local sekme = window:AddTab({ Title = "katliam", Icon = "skull" })
+local seyahat_sekme = window:AddTab({ Title = "seyahat", Icon = "map" })
+
+local ayarlar = { 
+    secili_npc = nil, 
+    farm_acik = false, 
+    uculuyor = false 
+}
+
+-- 1000 Stud Yakındaki Özgün NPC İsimlerini Bul
+local function yakindaki_npcleri_bul()
+    local npc_isimleri = {}
+    local char = oyuncu.Character
+    local hrp = char and char:FindFirstChild("HumanoidRootPart")
+    
+    if not hrp then return npc_isimleri end
+
+    local function isim_ekle(npc)
+        if npc:FindFirstChild("Humanoid") and npc.Humanoid.Health > 0 and npc:FindFirstChild("HumanoidRootPart") then
+            local uzaklik = (hrp.Position - npc.HumanoidRootPart.Position).Magnitude
+            if uzaklik <= 1000 then
+                -- Aynı isimde birden fazla NPC varsa listeye bir kez eklesin
+                if not table.find(npc_isimleri, npc.Name) then
+                    table.insert(npc_isimleri, npc.Name)
+                end
+            end
+        end
+    end
+
+    for _, klasor_adi in pairs({"Enemies", "NPCs", "Mob", "Monsters"}) do
+        local klasor = workspace:FindFirstChild(klasor_adi)
+        if klasor then
+            for _, npc in pairs(klasor:GetChildren()) do
+                isim_ekle(npc)
+            end
+        end
+    end
+    
+    if #npc_isimleri == 0 then
+        for _, obj in pairs(workspace:GetChildren()) do
+            if obj:IsA("Model") and obj ~= char then
+                isim_ekle(obj)
+            end
+        end
+    end
+    
+    return npc_isimleri
+end
+
+-- Arayüz Öğeleri
+local dropdown = sekme:AddDropdown("npc_sec", {
+    Title = "hedef npc seç",
+    Values = {},
+    Multi = false,
+    Default = nil,
+})
+
+dropdown:OnChanged(function(Value)
+    ayarlar.secili_npc = Value
+end)
+
+sekme:AddButton({
+    Title = "listeyi yenile (1000 stud)",
+    Callback = function()
+        local liste = yakindaki_npcleri_bul()
+        if #liste == 0 then
+            fluent:Notify({Title = "hata", Content = "yakında hiç npc bulunamadı!", Duration = 3})
+        else
+            dropdown:SetValues(liste)
+            fluent:Notify({Title = "başarılı", Content = #liste .. " farklı tür npc bulundu.", Duration = 3})
+        end
+    end
+})
+
+local oto_farm_toggle = sekme:AddToggle("oto_farm", { 
+    Title = "seçili npc'leri farmla", 
+    Default = false 
+})
+
+oto_farm_toggle:OnChanged(function(v)
+    ayarlar.farm_acik = v
+end)
+
+-- Vurma Fonksiyonu (Eski min_gaming_patlat)
+local function min_gaming_patlat(hedef_listesi, ana_hedef)
+    local char = oyuncu.Character
+    if not char then return end
+
+    local eldeki_silah = char:FindFirstChildOfClass("Tool")
+    if not eldeki_silah then
+        local canta_silah = oyuncu.Backpack:FindFirstChildOfClass("Tool")
+        if canta_silah then
+            char.Humanoid:EquipTool(canta_silah)
+        else
+            return
+        end
+    end
+
+    pcall(function()
+        local reg_attack = repstorage.Modules.Net["RE/RegisterAttack"]
+        local reg_hit = repstorage.Modules.Net["RE/RegisterHit"]
+        
+        reg_attack:FireServer(1e-9) 
+        reg_hit:FireServer(ana_hedef, hedef_listesi) 
+    end)
+end
+
+-- Seçilen İsme Göre En Yakın NPC'yi Bul
+local function get_closest_npc(isim)
+    local char = oyuncu.Character
+    local hrp = char and char:FindFirstChild("HumanoidRootPart")
+    if not hrp then return nil end
+    
+    local en_yakin_npc = nil
+    local en_kisa_mesafe = math.huge
+    
+    local function kontrol_et(npc)
+        if npc.Name == isim and npc:FindFirstChild("Humanoid") and npc.Humanoid.Health > 0 and npc:FindFirstChild("HumanoidRootPart") then
+            local mesafe = (hrp.Position - npc.HumanoidRootPart.Position).Magnitude
+            if mesafe < en_kisa_mesafe then
+                en_kisa_mesafe = mesafe
+                en_yakin_npc = npc
+            end
+        end
+    end
+    
+    for _, klasor_adi in pairs({"Enemies", "NPCs", "Mob", "Monsters"}) do
+        local klasor = workspace:FindFirstChild(klasor_adi)
+        if klasor then
+            for _, npc in pairs(klasor:GetChildren()) do
+                kontrol_et(npc)
+            end
+        end
+    end
+    
+    if not en_yakin_npc then
+        for _, obj in pairs(workspace:GetChildren()) do
+            if obj:IsA("Model") and obj ~= char then
+                kontrol_et(obj)
+            end
+        end
+    end
+    
+    return en_yakin_npc
+end
+
+-- Auto Farm Döngüsü (Hareket ve Vurma)
+local suanki_tween = nil
+
+task.spawn(function()
+    while task.wait() do
+        if ayarlar.farm_acik and ayarlar.secili_npc then
+            -- Hedefi güncelle
+            local hedef_npc = get_closest_npc(ayarlar.secili_npc)
+            
+            if hedef_npc then
+                local char = oyuncu.Character
+                local hrp = char and char:FindFirstChild("HumanoidRootPart")
+                local e_hrp = hedef_npc:FindFirstChild("HumanoidRootPart") or hedef_npc:FindFirstChild("Head")
+                
+                if hrp and e_hrp then
+                    -- Hedef NPC'nin tam 12 stud altı
+                    local hedef_cframe = e_hrp.CFrame * CFrame.new(0, -12, 0)
+                    local uzaklik = (hrp.Position - hedef_cframe.Position).Magnitude
+                    
+                    if uzaklik > 15 then
+                        -- Uzaksak uçuş moduna geç
+                        ayarlar.uculuyor = true
+                        
+                        -- Mevcut bir tween yoksa veya hedeften çok saptıysak yeni tween başlat (300 Hız)
+                        if not suanki_tween or suanki_tween.PlaybackState ~= Enum.PlaybackState.Playing then
+                            local hiz = uzaklik / 300
+                            suanki_tween = tweenservice:Create(hrp, TweenInfo.new(hiz, Enum.EasingStyle.Linear), {CFrame = hedef_cframe})
+                            suanki_tween:Play()
+                        end
+                    else
+                        -- Yeterince yaklaştıysak tweeni bitir ve saldırmaya başla
+                        ayarlar.uculuyor = false
+                        if suanki_tween then
+                            suanki_tween:Cancel()
+                            suanki_tween = nil
+                        end
+                        
+                        -- Sürekli tam 12 stud altında asılı kalması için pozisyonu kilitle
+                        hrp.CFrame = hedef_cframe
+                        
+                        -- Hedefe vur (Sadece tek bu mob hedefleniyor)
+                        min_gaming_patlat({{hedef_npc, e_hrp}}, e_hrp)
+                    end
+                end
+            else
+                -- Haritada o NPC kalmadıysa bekle
+                ayarlar.uculuyor = false
+                if suanki_tween then suanki_tween:Cancel() suanki_tween = nil end
+            end
+        else
+            ayarlar.uculuyor = false
+            if suanki_tween then suanki_tween:Cancel() suanki_tween = nil end
+        end
+    end
+end)
+
+-- Uçarken/Altındayken Takılmamak İçin Noclip ve Yerçekimini Engelleme Döngüsü
+runservice.Stepped:Connect(function()
+    local char = oyuncu.Character
+    if not char then return end
+
+    if ayarlar.farm_acik or ayarlar.uculuyor then
+        -- Objelerin içinden geç (Noclip)
+        for _, parca in pairs(char:GetDescendants()) do
+            if parca:IsA("BasePart") and parca.CanCollide then 
+                parca.CanCollide = false 
+            end
+        end
+        
+        -- Düşmemek veya yukarı fırlamamak için hızı (Velocity) sıfırlıyoruz
+        local hrp = char:FindFirstChild("HumanoidRootPart")
+        if hrp then
+            hrp.Velocity = Vector3.new(0, 0, 0)
+        end
+    end
+end)
+
+window:SelectTab(1)
