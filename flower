@@ -1,0 +1,82 @@
+local fluent = loadstring(game:HttpGet("https://github.com/dawid-scripts/Fluent/releases/latest/download/main.lua"))()
+local window = fluent:CreateWindow({
+    Title = "nurullah'in üşengeçlik hub'i",
+    SubTitle = "v2 çiçek bulucu",
+    TabWidth = 160,
+    Size = UDim2.fromOffset(580, 460),
+    Acrylic = true,
+    Theme = "Dark"
+})
+
+local tabs = { main = window:AddTab({ Title = "çiçekler", Icon = "home" }) }
+local tweenservice = game:GetService("TweenService")
+local player = game.Players.LocalPlayer
+
+local function applyesp(part)
+    if not part:FindFirstChild("cicek_esp") then
+        local hl = Instance.new("Highlight")
+        hl.Name = "cicek_esp"
+        hl.FillColor = Color3.fromRGB(255, 50, 255)
+        hl.OutlineColor = Color3.fromRGB(255, 255, 255)
+        hl.Parent = part
+    end
+end
+
+local function tweento(targetpos)
+    if player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
+        local hrp = player.Character.HumanoidRootPart
+        local dist = (hrp.Position - targetpos).Magnitude
+        local speed = 300 -- anti cheat'e takilmamak icin hizi abartma
+        local ti = TweenInfo.new(dist/speed, Enum.EasingStyle.Linear)
+        local tween = tweenservice:Create(hrp, ti, {CFrame = CFrame.new(targetpos)})
+        tween:Play()
+    end
+end
+
+tabs.main:AddButton({
+    Title = "çiçeklere esp çak",
+    Callback = function()
+        local cicek_bulundu = false
+        for _, v in pairs(workspace:GetDescendants()) do
+            if v.Name == "Flower1" or v.Name == "Flower2" then
+                applyesp(v)
+                cicek_bulundu = true
+            end
+        end
+        if not cicek_bulundu then
+            fluent:Notify({ Title = "hata", Content = "haritada su an cicek yok, server degis", Duration = 3 })
+        end
+    end
+})
+
+tabs.main:AddButton({
+    Title = "kırmızı çiçeğe git (gündüz çıkar)",
+    Callback = function()
+        for _, v in pairs(workspace:GetDescendants()) do
+            if v.Name == "Flower2" then
+                tweento(v.Position)
+                return
+            end
+        end
+        fluent:Notify({ Title = "yok", Content = "kirmizi cicek su an haritada yok", Duration = 3 })
+    end
+})
+
+tabs.main:AddButton({
+    Title = "mavi çiçeğe git (gece çıkar)",
+    Callback = function()
+        for _, v in pairs(workspace:GetDescendants()) do
+            if v.Name == "Flower1" then
+                tweento(v.Position)
+                return
+            end
+        end
+        fluent:Notify({ Title = "yok", Content = "mavi cicek su an haritada yok", Duration = 3 })
+    end
+})
+
+fluent:Notify({
+    Title = "selam nurullah",
+    Content = "script yüklendi usta. sari cicek icin npc kesmeyi unutma.",
+    Duration = 5
+})
