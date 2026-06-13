@@ -15,7 +15,8 @@ local config = {
     dashProtection = true,
     fastAttackModule = false,
     autoAura = false,
-    controlMode = false -- YENİ: Control Meyvesi Modu
+    controlMode = false,
+    yetiMode = false -- YENİ: Yeti Meyvesi Modu
 }
 
 local function saveConfig()
@@ -179,8 +180,34 @@ local function autoClick()
                                 end)
                             end
                         end
-                    end
+                                        end
                     task.wait(1 / 6) -- Control M1 Vurma Hızı
+                    
+                elseif config.yetiMode then
+                    -- YENİ: YETİ MEYVESİ ÖZEL ATAK MODÜLÜ
+                    local char = LocalPlayer.Character
+                    if char then
+                        local yetiTool = char:FindFirstChild("Yeti-Yeti")
+                        if not yetiTool then
+                            local backpackTool = LocalPlayer.Backpack:FindFirstChild("Yeti-Yeti")
+                            if backpackTool then
+                                char.Humanoid:EquipTool(backpackTool)
+                                yetiTool = backpackTool
+                                task.wait(0.2)
+                            end
+                        end
+                        
+                        if yetiTool then
+                            local remote = yetiTool:FindFirstChild("LeftClickRemote")
+                            if remote then
+                                pcall(function()
+                                    -- Verdiğin cobalt kodundaki Yeti M1 ateşleme olayı
+                                    remote:FireServer(Vector3.new(-0.322111338377, 0, -0.94670188426971), 2)
+                                end)
+                            end
+                        end
+                    end
+                    task.wait(1 / 6) -- Yeti M1 Vurma Hızı
                     
                 elseif config.fastAttackModule then
                     minGamingFastAttack()
@@ -236,8 +263,8 @@ local function bringMobs()
                 
                 eHum:ChangeState(11)
                 
-                -- YENİ: CONTROL MODU İÇİN 5 STUD ALTA, NORMAL İÇİN 12 STUD ÜSTE SABİTLEME
-                if config.controlMode then
+                -- YENİ: CONTROL VE YETİ MODU İÇİN 5 STUD ALTA, NORMAL İÇİN 12 STUD ÜSTE SABİTLEME
+                if config.controlMode or config.yetiMode then
                     eHrp.CFrame = hrp.CFrame * CFrame.new(0, -5, 0)
                 else
                     eHrp.CFrame = hrp.CFrame * CFrame.new(0, 12, 0)
@@ -290,6 +317,7 @@ end)
 
 -- Arayüz Toggles
 Tabs.Main:AddToggle("ControlModeToggle", { Title = "Control M1 Modu (5 Stud Altta)", Default = config.controlMode, Callback = function(state) config.controlMode = state; saveConfig() end })
+Tabs.Main:AddToggle("YetiModeToggle", { Title = "Yeti M1 Modu (5 Stud Altta)", Default = config.yetiMode, Callback = function(state) config.yetiMode = state; saveConfig() end })
 Tabs.Main:AddToggle("FastAttackToggle", { Title = "hızlı atak (min gaming)", Default = config.fastAttackModule, Callback = function(state) config.fastAttackModule = state; saveConfig() end })
 Tabs.Main:AddToggle("AutoAuraToggle", { Title = "oto aura (haki)", Default = config.autoAura, Callback = function(state) config.autoAura = state; saveConfig() end })
 Tabs.Main:AddToggle("DashProt", { Title = "anti-dash (geri çekme)", Default = config.dashProtection, Callback = function(state) config.dashProtection = state; saveConfig() end })
