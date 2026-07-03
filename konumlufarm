@@ -16,7 +16,8 @@ local config = {
     fastAttackModule = false,
     autoAura = false,
     controlMode = false,
-    yetiMode = false -- YENİ: Yeti Meyvesi Modu
+    yetiMode = false, -- YENİ: Yeti Meyvesi Modu
+    kitsuneMode = false -- YENİ: Kitsune Meyvesi Modu
 }
 
 local function saveConfig()
@@ -28,6 +29,8 @@ local function loadConfig()
         local success, result = pcall(function() return HttpService:JSONDecode(readfile(configFileName)) end)
         if success and result then 
             for k, v in pairs(result) do config[k] = v end 
+            config.bringDistance = tonumber(config.bringDistance) or 320
+            config.tweenSpeed = tonumber(config.tweenSpeed) or 220
         end
     end
 end
@@ -209,6 +212,64 @@ local function autoClick()
                     end
                     task.wait(1 / 6) -- Yeti M1 Vurma Hızı
                     
+                elseif config.kitsuneMode then
+                    -- YENİ: KİTSUNE MEYVESİ ÖZEL ATAK MODÜLÜ
+                    local char = LocalPlayer.Character
+                    if char then
+                        local kitsuneTool = char:FindFirstChild("Kitsune-Kitsune")
+                        if not kitsuneTool then
+                            local backpackTool = LocalPlayer.Backpack:FindFirstChild("Kitsune-Kitsune")
+                            if backpackTool then
+                                char.Humanoid:EquipTool(backpackTool)
+                                kitsuneTool = backpackTool
+                                task.wait(0.2)
+                            end
+                        end
+                        
+                        if kitsuneTool then
+                            local remote = kitsuneTool:FindFirstChild("LeftClickRemote")
+                            if remote then
+                                -- Target mob aiming
+                                local myHrp = char:FindFirstChild("HumanoidRootPart")
+                                local targetMob = nil
+                                local closestDist = math.huge
+                                local enemiesFolder = workspace:FindFirstChild("Enemies")
+                                if myHrp and enemiesFolder then
+                                    for _, enemy in pairs(enemiesFolder:GetChildren()) do
+                                        local eHrp = enemy:FindFirstChild("HumanoidRootPart")
+                                        local eHum = enemy:FindFirstChild("Humanoid")
+                                        if eHrp and eHum and eHum.Health > 0 then
+                                            if currentFarmTargetMob == "(hepsi)" or enemy.Name == currentFarmTargetMob then
+                                                local dist = (myHrp.Position - eHrp.Position).Magnitude
+                                                local bringDist = tonumber(config.bringDistance) or 320
+                                                if dist <= bringDist and dist < closestDist then
+                                                    closestDist = dist
+                                                    targetMob = enemy
+                                                end
+                                            end
+                                        end
+                                    end
+                                end
+                                
+                                local targetHrp = targetMob and targetMob:FindFirstChild("HumanoidRootPart")
+                                local direction = nil
+                                if targetHrp and myHrp then
+                                    local dirVec = targetHrp.Position - myHrp.Position
+                                    direction = dirVec.Magnitude > 0.1 and dirVec.Unit or myHrp.CFrame.LookVector
+                                elseif myHrp then
+                                    direction = myHrp.CFrame.LookVector
+                                else
+                                    direction = Vector3.new(0, -1, 0)
+                                end
+                                
+                                pcall(function()
+                                    remote:FireServer(direction, 1)
+                                end)
+                            end
+                        end
+                    end
+                    task.wait(1 / 10) -- Kitsune M1 Vurma Hızı
+                    
                 elseif config.fastAttackModule then
                     minGamingFastAttack()
                     task.wait(0.05)
@@ -252,8 +313,8 @@ local function bringMobs()
         local eHum = enemy:FindFirstChild("Humanoid")
         if eHrp and eHum and eHum.Health > 0 then
             local dist = (hrp.Position - eHrp.Position).Magnitude
-
-            if dist <= config.bringDistance then
+            local bringDist = tonumber(config.bringDistance) or 320
+            if dist <= bringDist then
                 for _, part in pairs(enemy:GetDescendants()) do
                     if part:IsA("BasePart") then part.CanCollide = false end
                 end
@@ -263,8 +324,8 @@ local function bringMobs()
                 
                 eHum:ChangeState(11)
                 
-                -- YENİ: CONTROL VE YETİ MODU İÇİN 5 STUD ALTA, NORMAL İÇİN 12 STUD ÜSTE SABİTLEME
-                if config.controlMode or config.yetiMode then
+                -- YENİ: CONTROL, YETİ VE KİTSUNE MODU İÇİN ALTA, NORMAL İÇİN 12 STUD ÜSTE SABİTLEME
+                if config.controlMode or config.yetiMode or config.kitsuneMode then
                     eHrp.CFrame = hrp.CFrame * CFrame.new(0, -7, 0)
                 else
                     eHrp.CFrame = hrp.CFrame * CFrame.new(0, 12, 0)
@@ -318,6 +379,7 @@ end)
 -- Arayüz Toggles
 Tabs.Main:AddToggle("ControlModeToggle", { Title = "Control M1 Modu (5 Stud Altta)", Default = config.controlMode, Callback = function(state) config.controlMode = state; saveConfig() end })
 Tabs.Main:AddToggle("YetiModeToggle", { Title = "Yeti M1 Modu (5 Stud Altta)", Default = config.yetiMode, Callback = function(state) config.yetiMode = state; saveConfig() end })
+Tabs.Main:AddToggle("KitsuneModeToggle", { Title = "Kitsune M1 Modu (5 Stud Altta)", Default = config.kitsuneMode, Callback = function(state) config.kitsuneMode = state; saveConfig() end })
 Tabs.Main:AddToggle("FastAttackToggle", { Title = "hızlı atak (min gaming)", Default = config.fastAttackModule, Callback = function(state) config.fastAttackModule = state; saveConfig() end })
 Tabs.Main:AddToggle("AutoAuraToggle", { Title = "oto aura (haki)", Default = config.autoAura, Callback = function(state) config.autoAura = state; saveConfig() end })
 Tabs.Main:AddToggle("DashProt", { Title = "anti-dash (geri çekme)", Default = config.dashProtection, Callback = function(state) config.dashProtection = state; saveConfig() end })
@@ -368,7 +430,8 @@ local function safeTween(targetPos)
     hum:ChangeState(Enum.HumanoidStateType.Physics) 
     
     local dist = (hrp.Position - targetPos).Magnitude
-    local tInfo = TweenInfo.new(dist / config.tweenSpeed, Enum.EasingStyle.Linear)
+    local speed = tonumber(config.tweenSpeed) or 220
+    local tInfo = TweenInfo.new(dist / speed, Enum.EasingStyle.Linear)
     local t = TweenService:Create(hrp, tInfo, {CFrame = CFrame.new(targetPos)})
     t:Play()
     t.Completed:Wait()
@@ -424,7 +487,8 @@ local function startAutoFarm()
                     while autoFarmEnabled and waited < maxWait do
                         local hrp = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
                         if hrp then
-                            local aliveCount = getAliveMobCount(currentFarmTargetMob, hrp.Position, config.bringDistance + 50)
+                            local bringDist = tonumber(config.bringDistance) or 320
+                            local aliveCount = getAliveMobCount(currentFarmTargetMob, hrp.Position, bringDist + 50)
                             if aliveCount <= 0 then
                                 break 
                             end
