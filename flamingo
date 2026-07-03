@@ -1,0 +1,274 @@
+local Fluent = loadstring(game:HttpGet("https://github.com/dawid-scripts/Fluent/releases/latest/download/main.lua"))()
+
+local Window = Fluent:CreateWindow({
+    Title = "Flamingo Equip & Speed Bypass",
+    SubTitle = "Blox Fruits V1",
+    TabWidth = 160,
+    Size = UDim2.fromOffset(480, 320),
+    Theme = "Dark"
+})
+
+local Tabs = {
+    Main = Window:AddTab({ Title = "Eşya Bypass", Icon = "home" }),
+    LoveFruit = Window:AddTab({ Title = "Love Fruit", Icon = "heart" }),
+    Speed = Window:AddTab({ Title = "Hız Hilesi", Icon = "zap" })
+}
+
+local UserInputService = game:GetService("UserInputService")
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local TweenService = game:GetService("TweenService")
+local LocalPlayer = Players.LocalPlayer
+
+---------------------------------------------------------
+-- 1. EŞYA BYPASS (MAIN) KISMI
+---------------------------------------------------------
+local bypassEnabled = false
+
+Tabs.Main:AddToggle("FlamingoBypassToggle", {
+    Title = "Enable 1-4 Keys Bypass",
+    Description = "Flamingodayken yetenekleri zorla almanı sağlar.",
+    Default = false,
+    Callback = function(Value)
+        bypassEnabled = Value
+    end
+})
+
+local keyMapping = {
+    [Enum.KeyCode.One] = "Melee",       
+    [Enum.KeyCode.Two] = "Blox Fruit",  
+    [Enum.KeyCode.Three] = "Sword",     
+    [Enum.KeyCode.Four] = "Gun"         
+}
+
+local function forceEquipTool(tool)
+    local char = LocalPlayer.Character
+    if not char or not char:FindFirstChild("Humanoid") then return end
+    char.Humanoid:UnequipTools() 
+    task.wait(0.01)
+    char.Humanoid:EquipTool(tool)
+end
+
+UserInputService.InputBegan:Connect(function(input, gameProcessedEvent)
+    if not bypassEnabled then return end
+    if UserInputService:GetFocusedTextBox() then return end
+
+    local targetType = keyMapping[input.KeyCode]
+    if targetType then
+        local targetTool = nil
+        for _, t in pairs(LocalPlayer.Backpack:GetChildren()) do
+            if t:IsA("Tool") and t.ToolTip == targetType then
+                targetTool = t
+                break
+            end
+        end
+        if not targetTool and LocalPlayer.Character then
+            for _, t in pairs(LocalPlayer.Character:GetChildren()) do
+                if t:IsA("Tool") and t.ToolTip == targetType then
+                    targetTool = t
+                    break
+                end
+            end
+        end
+        if targetTool then
+            if targetTool.Parent == LocalPlayer.Character then
+                LocalPlayer.Character.Humanoid:UnequipTools()
+            else
+                forceEquipTool(targetTool)
+            end
+        end
+    end
+end)
+
+---------------------------------------------------------
+-- 2. LOVE FRUIT (KUSURSUZ OTOMATİK) KISMI
+---------------------------------------------------------
+local bestieTPEnabled = false
+local hasNotifiedBestie = false
+
+Tabs.LoveFruit:AddToggle("BestieToggle", {
+    Title = "Bestie Auto-Tween (Love V)",
+    Description = "Klonunu (Blank Buddy) otomatik bulur ve düşmana uçurur.",
+    Default = false,
+    Callback = function(Value)
+        bestieTPEnabled = Value
+        if not Value then
+            hasNotifiedBestie = false
+        end
+    end
+})
+
+local function getBesties()
+    local besties = {}
+    local char = LocalPlayer.Character
+    
+    local function checkModel(v)
+        if v:IsA("Model") and v ~= char and v:FindFirstChild("HumanoidRootPart") and v:FindFirstChild("Humanoid") and v.Humanoid.Health > 0 then
+            if Players:GetPlayerFromCharacter(v) then return end
+            
+            local name = string.lower(v.Name)
+            if string.find(name, "blank buddy") or string.find(name, "bestie") or name == string.lower(LocalPlayer.Name) then
+                if not v.HumanoidRootPart.Anchored then
+                    table.insert(besties, v)
+                end
+            end
+        end
+    end
+
+    for _, v in pairs(workspace:GetChildren()) do checkModel(v) end
+    if workspace:FindFirstChild("Characters") then
+        for _, v in pairs(workspace.Characters:GetChildren()) do checkModel(v) end
+    end
+    if workspace:FindFirstChild("Enemies") then
+        for _, v in pairs(workspace.Enemies:GetChildren()) do checkModel(v) end
+    end
+    
+    return besties
+end
+
+local function getNearestEnemy(position, bestiesList)
+    local nearestEnemy = nil
+    local shortestDistance = math.huge
+    
+    if workspace:FindFirstChild("Enemies") then
+        for _, enemy in pairs(workspace.Enemies:GetChildren()) do
+            if enemy:IsA("Model") and enemy:FindFirstChild("Humanoid") and enemy.Humanoid.Health > 0 and enemy:FindFirstChild("HumanoidRootPart") then
+                
+                local isOurClone = false
+                for _, b in pairs(bestiesList) do
+                    if b == enemy then
+                        isOurClone = true
+                        break
+                    end
+                end
+                
+                if not isOurClone then
+                    local dist = (enemy.HumanoidRootPart.Position - position).Magnitude
+                    if dist < shortestDistance then
+                        shortestDistance = dist
+                        nearestEnemy = enemy
+                    end
+                end
+                
+            end
+        end
+    end
+    return nearestEnemy
+end
+
+task.spawn(function()
+    while task.wait(0.1) do
+        if bestieTPEnabled then
+            local char = LocalPlayer.Character
+            if char and char:FindFirstChild("HumanoidRootPart") then
+                
+                local currentBesties = getBesties()
+                local nearest = getNearestEnemy(char.HumanoidRootPart.Position, currentBesties)
+                
+                if nearest and nearest:FindFirstChild("HumanoidRootPart") and #currentBesties > 0 then
+                    
+                    if not hasNotifiedBestie then
+                        hasNotifiedBestie = true
+                        Fluent:Notify({
+                            Title = "Klon Uçuşa Geçti!",
+                            Content = "Otomatik yakalama başarılı, P tuşuna gerek kalmadı!",
+                            Duration = 3
+                        })
+                    end
+                    
+                    for _, bestie in pairs(currentBesties) do
+                        local bestieHRP = bestie:FindFirstChild("HumanoidRootPart")
+                        if bestieHRP then
+                            local targetCFrame = nearest.HumanoidRootPart.CFrame * CFrame.new(0, 0, 2.5)
+                            local distance = (bestieHRP.Position - targetCFrame.Position).Magnitude
+                            local speed = 300
+                            local timeToReach = distance / speed
+                            
+                            if timeToReach < 0.05 then
+                                timeToReach = 0.05
+                            end
+                            
+                            local tweenInfo = TweenInfo.new(timeToReach, Enum.EasingStyle.Linear)
+                            local tween = TweenService:Create(bestieHRP, tweenInfo, {CFrame = targetCFrame})
+                            tween:Play()
+                        end
+                    end
+                end
+            end
+        end
+    end
+end)
+
+---------------------------------------------------------
+-- 3. HIZ HİLESİ (JITTER FİXLENMİŞ VE WALK SPEED KORUNMUŞ SİSTEM) KISMI
+---------------------------------------------------------
+local speedEnabled = false
+local speedValue = 50 
+local defaultWalkSpeed = 16 
+
+Tabs.Speed:AddToggle("SpeedToggle", {
+    Title = "Hız Hilesi (Kusursuz Mod)",
+    Description = "Yürürken normal hız, Flamingodayken titreşimsiz uçuş.",
+    Default = false,
+    Callback = function(Value)
+        speedEnabled = Value
+        if not Value and LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Humanoid") then
+            LocalPlayer.Character.Humanoid.WalkSpeed = defaultWalkSpeed
+        end
+    end
+})
+
+Tabs.Speed:AddSlider("SpeedSlider", {
+    Title = "Hız Değeri",
+    Description = "Yürüme hızı ve Flamingonun ek uçuş hızı.",
+    Default = 50,
+    Min = 16,
+    Max = 250,
+    Rounding = 0,
+    Callback = function(Value)
+        speedValue = Value
+    end
+})
+
+-- 1. NORMAL YÜRÜME İÇİN (Oyunun hızı sıfırlamasını engellemek için RenderStepped ZORUNLU)
+RunService.RenderStepped:Connect(function()
+    if speedEnabled and LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Humanoid") then
+        local char = LocalPlayer.Character
+        local isFlamingo = char:FindFirstChild("Flamingo") and char.Flamingo:IsA("Accessory")
+        
+        -- Eğer Flamingoda DEĞİLSEK WalkSpeed'i uygula (Eskisi gibi sorunsuz çalışması için)
+        if not isFlamingo then
+            char.Humanoid.WalkSpeed = speedValue
+        end
+    end
+end)
+
+-- 2. FLAMİNGO UÇUŞU İÇİN (Fizik motoru ve kameranın titrememesi için Heartbeat ZORUNLU)
+RunService.Heartbeat:Connect(function(deltaTime)
+    if speedEnabled and LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
+        local char = LocalPlayer.Character
+        local isFlamingo = char:FindFirstChild("Flamingo") and char.Flamingo:IsA("Accessory")
+        
+        -- Eğer Flamingodaysak 3D titremesiz uçuşu uygula
+        if isFlamingo then
+            local cam = workspace.CurrentCamera
+            local moveVec = Vector3.new(0, 0, 0)
+            
+            if UserInputService:IsKeyDown(Enum.KeyCode.W) then moveVec = moveVec + cam.CFrame.LookVector end
+            if UserInputService:IsKeyDown(Enum.KeyCode.S) then moveVec = moveVec - cam.CFrame.LookVector end
+            if UserInputService:IsKeyDown(Enum.KeyCode.A) then moveVec = moveVec - cam.CFrame.RightVector end
+            if UserInputService:IsKeyDown(Enum.KeyCode.D) then moveVec = moveVec + cam.CFrame.RightVector end
+            
+            if moveVec.Magnitude > 0 then
+                moveVec = moveVec.Unit
+                char:PivotTo(char:GetPivot() + (moveVec * (speedValue * deltaTime)))
+            end
+        end
+    end
+end)
+
+Fluent:Notify({
+    Title = "Son Fix Uygulandı!",
+    Content = "WalkSpeed eskisi gibi çalışıyor, Flamingo da titremiyor. Kusursuz!",
+    Duration = 5
+})
