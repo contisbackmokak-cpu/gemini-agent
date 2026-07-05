@@ -338,6 +338,10 @@ end
 local function autoFruitTask()
     task.spawn(function()
         while task.wait(0.5) do
+            -- Eşya taşırken ya da adalar arası uçarken (tweening) storelamayı ertele
+            if isPlayerTweening then continue end
+            if not config.autoStoreFruit and not config.autoRollFruit then continue end
+            
             local currentTime = os.time()
             local commF = game:GetService("ReplicatedStorage"):FindFirstChild("Remotes")
             commF = commF and commF:FindFirstChild("CommF_")
@@ -372,6 +376,12 @@ local function autoFruitTask()
                             
                             -- cobalt'ın ifşa ettiği o kusursuz, tek atan remote!
                             commF:InvokeServer("StoreFruit", storeName, tool)
+                            task.wait(0.5) -- server cevabı için bekle
+                            
+                            -- softlock önleme: eğer meyve hala elimizde kaldıysa (depo dolu demektir), backpack'e geri sok
+                            if tool.Parent == char and hum then
+                                hum:UnequipTools()
+                            end
                             
                             -- spamı ve crashi engellemek için bu meyveyi kara listeye al
                             attemptedFruits[tool] = true 
@@ -1604,6 +1614,11 @@ local lastQuestStatus = false
 local function startAutoLevelFarm()
     task.spawn(function()
         while autoLevelFarmEnabled do
+            if isStoringFruit then
+                autoFarmKills = false
+                task.wait(0.2)
+                continue
+            end
             local Mon, LevelQuest, NameQuest, NameMon, CFrameQuest, CFrameMon
             local isBoss = false
             local spawnedBoss = nil
@@ -1755,7 +1770,7 @@ local styleData = {
 local function autoStyleTask()
     task.spawn(function()
         while task.wait(3) do
-            if config.autoBuyStyles then
+            if config.autoBuyStyles and not isStoringFruit then
                 local meleeTool = getCurrentMelee()
                 if not meleeTool then continue end
                 
