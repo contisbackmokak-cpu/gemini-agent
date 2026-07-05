@@ -1,140 +1,136 @@
 local Fluent = loadstring(game:HttpGet("https://github.com/dawid-scripts/Fluent/releases/latest/download/main.lua"))()
-local player = game.Players.LocalPlayer
-local tween_service = game:GetService("TweenService")
-local workspace = game:GetService("Workspace")
-local core_gui = game:GetService("CoreGui")
 
-local window = Fluent:CreateWindow({
-    Title = "fruit",
-    SubTitle = "nurullah kudurttu v3 (artik kastirmiyor)",
+local Window = Fluent:CreateWindow({
+    Title = "meyve dızlayıcı v565",
+    SubTitle = "nurullah'ın tam otomatik intikamı",
     TabWidth = 160,
-    Size = UDim2.fromOffset(580, 460),
-    Theme = "Darker"
+    Size = UDim2.fromOffset(480, 320),
+    Acrylic = false,
+    Theme = "Dark",
+    MinimizeKey = Enum.KeyCode.LeftControl
 })
 
-local tabs = {
-    main = window:AddTab({ Title = "meyve avi", Icon = "apple" })
+local Tabs = {
+    Main = Window:AddTab({ Title = "dızlama", Icon = "apple" }),
+    AutoStore = Window:AddTab({ Title = "oto sakla", Icon = "box" })
 }
 
-local esp_enabled = false
-local tween_enabled = false
-local tween_speed = 300
-local aktif_tween = nil
+local RunService = game:GetService("RunService")
+local Players = game:GetService("Players")
+local LocalPlayer = Players.LocalPlayer
 
-local fruits_list = {}
-local active_esps = {}
+local dizzingEnabled = false
+local autoStoreEnabled = false
+local attemptedFruits = {} -- crash yememek için aynı meyveyi bir kere deneyip bıraktığımız liste
 
--- eski esp'leri temizle
-local function clear_esps()
-    for _, v in pairs(active_esps) do
-        if v then v:Destroy() end
-    end
-    table.clear(active_esps)
-end
-
--- esp cizdir
-local function draw_esp(part, name)
-    if not part then return end
-    local billboard = Instance.new("BillboardGui")
-    billboard.Name = "fruit_esp_velet"
-    billboard.Adornee = part
-    billboard.Size = UDim2.new(0, 200, 0, 50)
-    billboard.AlwaysOnTop = true
-    
-    local text = Instance.new("TextLabel")
-    text.Size = UDim2.new(1, 0, 1, 0)
-    text.BackgroundTransparency = 1
-    text.Text = name .. " [FRUIT]"
-    text.TextColor3 = Color3.fromRGB(0, 255, 0)
-    text.TextStrokeTransparency = 0
-    text.TextSize = 16
-    text.Parent = billboard
-    
-    billboard.Parent = core_gui
-    table.insert(active_esps, billboard)
-end
-
--- esp'leri yenile
-local function refresh_esps()
-    clear_esps()
-    if not esp_enabled then return end
-    for tool, handle in pairs(fruits_list) do
-        if handle and handle.Parent then
-            draw_esp(handle, tool.Name)
+Tabs.Main:AddToggle("DizToggle", {
+    Title = "otomatik meyve vakumla",
+    Default = false,
+    Callback = function(state)
+        dizzingEnabled = state
+        if state then
+            Fluent:Notify({Title = "aktif", Content = "haritadaki sahipsiz meyveler kafana yağacak ameka.", Duration = 3})
+        else
+            Fluent:Notify({Title = "pasif", Content = "vakum kapandı.", Duration = 3})
         end
     end
-end
+})
 
-tabs.main:AddToggle("esp_toggle", {Title = "fruit esp", Default = false}):OnChanged(function(state)
-    esp_enabled = state
-    refresh_esps()
-end)
-
-tabs.main:AddToggle("tween_toggle", {Title = "fruit oto tween (300 hiz)", Default = false}):OnChanged(function(state)
-    tween_enabled = state
-    if not state and aktif_tween then
-        aktif_tween:Cancel()
-        aktif_tween = nil
-    end
-end)
-
--- yeni meyve algilayici
-local function add_fruit(v)
-    if (v:IsA("Tool") or v:IsA("Model")) and string.find(string.lower(v.Name), "fruit") then
-        local handle = v:FindFirstChild("Handle") or v.PrimaryPart or v:FindFirstChildWhichIsA("BasePart")
-        if handle then
-            fruits_list[v] = handle
-            refresh_esps()
+Tabs.AutoStore:AddToggle("StoreToggle", {
+    Title = "oto sakla (elde tutup cukkalama)",
+    Default = false,
+    Callback = function(state)
+        autoStoreEnabled = state
+        if state then
+            Fluent:Notify({Title = "aktif", Content = "gelen meyveler saniyesinde depoya atılacak.", Duration = 3})
         end
     end
-end
+})
 
--- silinen meyveyi listeden at
-local function remove_fruit(v)
-    if fruits_list[v] then
-        fruits_list[v] = nil
-        refresh_esps()
-    end
-end
+-- 1. AŞAMA: MEYVEYİ VAKUMLAMA DÖNGÜSÜ
+RunService.RenderStepped:Connect(function()
+    if not dizzingEnabled then return end
+    
+    pcall(function()
+        if sethiddenproperty then
+            sethiddenproperty(LocalPlayer, "SimulationRadius", math.huge)
+        end
+    end)
 
--- workspace'i yormadan sadece degisiklikleri dinle
-workspace.DescendantAdded:Connect(add_fruit)
-workspace.DescendantRemoving:Connect(remove_fruit)
+    local char = LocalPlayer.Character
+    if not char or not char:FindFirstChild("HumanoidRootPart") then return end
 
--- ilk acilista bi kere tara ki mapteki hazir meyveleri kacirmayalim
-for _, v in pairs(workspace:GetDescendants()) do
-    add_fruit(v)
-end
-
--- tween dongusu (sadece gercekten lazimsa calisiyor)
-task.spawn(function()
-    while task.wait(0.1) do
-        if tween_enabled then
-            local char = player.Character
-            if char and char:FindFirstChild("HumanoidRootPart") then
-                local root = char.HumanoidRootPart
-                local target_handle = nil
-                
-                -- listedeki ilk meyveyi sec
-                for _, handle in pairs(fruits_list) do
-                    if handle and handle.Parent then
-                        target_handle = handle
-                        break
-                    end
-                end
-                
-                if target_handle then
-                    local dist = (root.Position - target_handle.Position).Magnitude
-                    local time = dist / tween_speed
-                    
-                    local tween_info = TweenInfo.new(time, Enum.EasingStyle.Linear)
-                    aktif_tween = tween_service:Create(root, tween_info, {CFrame = target_handle.CFrame})
-                    aktif_tween:Play()
-                    
-                    aktif_tween.Completed:Wait()
-                    task.wait(0.2)
-                end
+    for _, obj in ipairs(workspace:GetChildren()) do
+        if obj:IsA("Tool") and string.find(obj.Name, "Fruit") then
+            local handle = obj:FindFirstChild("Handle")
+            if handle then
+                handle.CanCollide = false
+                handle.CFrame = char.HumanoidRootPart.CFrame
             end
         end
     end
 end)
+
+-- 2. AŞAMA: ELDE TUTUP SAKLAMA (TÜM MEYVELER İÇİN DİNAMİK İSİM BAZLI)
+task.spawn(function()
+    while task.wait(0.5) do
+        if not autoStoreEnabled then continue end
+        
+        local commF = game:GetService("ReplicatedStorage"):FindFirstChild("Remotes")
+        commF = commF and commF:FindFirstChild("CommF_")
+        if not commF then continue end
+        
+        local function storeFruit(tool)
+            if tool:IsA("Tool") and (string.find(tool.Name, "Fruit") or tool.ToolTip == "Demon Fruit") then
+                
+                -- crash önleme: bu tool objesini daha önce denediysek pas geç
+                if attemptedFruits[tool] then return end 
+
+                pcall(function()
+                    local char = LocalPlayer.Character
+                    local hum = char and char:FindFirstChild("Humanoid")
+                    
+                    -- çantadaysa karakterin eline aldırıyoruz (servera göstermek için)
+                    if hum and tool.Parent == LocalPlayer.Backpack then
+                        hum:EquipTool(tool)
+                        task.wait(0.5) -- eline alması ve serverın onaylaması için bekle
+                    end
+                    
+                    -- artık elimizde, cobalt metodunu mermiliyoruz
+                    if tool.Parent == char then
+                        -- dumduz "Rocket", "Spin", "Mammoth" vb. ismini aliyoruz
+                        local baseName = string.gsub(tool.Name, " Fruit", "") 
+                        local storeName = baseName
+                        
+                        -- eğer isimde tire (-) yoksa, blox fruits serverının istediği gibi ikiliyoruz
+                        -- örnek: "Rocket" ise "Rocket-Rocket" olur. zaten "Spider-Spider" ise dokunmaz.
+                        if not string.find(baseName, "-") then
+                            storeName = baseName .. "-" .. baseName
+                        end
+                        
+                        -- cobalt'ın ifşa ettiği o kusursuz, tek atan remote!
+                        commF:InvokeServer("StoreFruit", storeName, tool)
+                        
+                        -- spamı ve crashi engellemek için bu meyveyi kara listeye al
+                        attemptedFruits[tool] = true 
+                    end
+                end)
+            end
+        end
+
+        pcall(function()
+            -- önce çantayı tara
+            for _, tool in pairs(LocalPlayer.Backpack:GetChildren()) do
+                storeFruit(tool)
+            end
+            -- sonra zatwn eline aldığın varsa ona çullan
+            if LocalPlayer.Character then
+                for _, tool in pairs(LocalPlayer.Character:GetChildren()) do
+                    storeFruit(tool)
+                end
+            end
+        end)
+    end
+end)
+
+Window:SelectTab(1)
