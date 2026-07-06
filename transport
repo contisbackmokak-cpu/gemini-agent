@@ -1,0 +1,145 @@
+local runService = game:GetService("RunService")
+local players = game:GetService("Players")
+local localPlayer = players.LocalPlayer
+
+-- fluent ui'yi çekiyoruz
+local fluent = loadstring(game:HttpGet("https://github.com/dawid-scripts/Fluent/releases/latest/download/main.lua"))()
+
+local window = fluent:CreateWindow({
+    Title = "nurullah'ın kutsal haritası",
+    SubTitle = "300 hızla nokta atışı koordinat",
+    TabWidth = 160,
+    Size = UDim2.fromOffset(500, 380),
+    Acrylic = true,
+    Theme = "Dark"
+})
+
+local tabs = {
+    main = window:AddTab({ Title = "adalar", Icon = "rbxassetid://10888331510" })
+}
+
+local uciyor_muyuz = false
+local baglanti = nil
+local secilen_ada_cframe = nil
+
+-- senin fırlattığın koddan ayıkladığım nokta atışı koordinat listesi
+local adalar = {
+    ["WindMill"] = CFrame.new(979.799, 16.516, 1429.047),
+    ["Marine"] = CFrame.new(-2566.43, 6.856, 2045.256),
+    ["Middle Town"] = CFrame.new(-690.331, 15.094, 1582.238),
+    ["Jungle"] = CFrame.new(-1612.796, 36.852, 149.128),
+    ["Desert"] = CFrame.new(944.158, 20.92, 4373.3),
+    ["Colosseum"] = CFrame.new(-1427.62, 7.288, -2792.772),
+    ["Sky Island 1"] = CFrame.new(-4869.103, 733.461, -2667.018),
+    ["Sky Island 2"] = CFrame.new(-4607.823, 872.543, -1667.557),
+    ["Sky Island 3"] = CFrame.new(-7894.618, 5547.142, -380.291),
+    ["Prison"] = CFrame.new(4875.33, 5.652, 734.85),
+    ["Under Water Island"] = CFrame.new(61163.852, 11.68, 1819.784),
+    ["Shank Room"] = CFrame.new(-1442.166, 29.879, -28.355),
+    ["Mob Island"] = CFrame.new(-2850.201, 7.392, 5354.993),
+    ["Frist Spot"] = CFrame.new(-11.311, 29.277, 2771.522),
+    ["Flamingo Mansion"] = CFrame.new(-483.734, 332.038, 595.327),
+    ["Flamingo Room"] = CFrame.new(2284.414, 15.152, 875.725),
+    ["Green Zone"] = CFrame.new(-2448.53, 73.016, -3210.631),
+    ["Zombie Island"] = CFrame.new(-5622.033, 492.196, -781.786),
+    ["Cursed Ship"] = CFrame.new(923.402, 125.057, 32885.875),
+    ["Ice Castle"] = CFrame.new(6148.412, 294.387, -6741.117),
+    ["Forgotten Island"] = CFrame.new(-3032.764, 317.897, -10075.373),
+    ["Mini Sky Island"] = CFrame.new(-288.741, 49326.316, -35248.594),
+    ["Great Tree"] = CFrame.new(2681.274, 1682.809, -7190.985),
+    ["Castle On The Sea"] = CFrame.new(-5083.26, 314.606, -3175.673),
+    ["Port Town"] = CFrame.new(-226.751, 20.603, 5538.34),
+    ["Hydra Island"] = CFrame.new(5291.249, 1005.443, 393.762),
+    ["Mansion"] = CFrame.new(-12471.17, 374.94, -7551.678),
+    ["Haunted Castle"] = CFrame.new(-9515.372, 164.006, 5786.061),
+    ["Cake Island"] = CFrame.new(-1884.775, 19.328, -11666.897),
+    ["Cocoa Island"] = CFrame.new(87.943, 73.555, -12319.465),
+    ["Tiki Outpost"] = CFrame.new(-16218.683, 9.086, 445.618),
+    ["Dragon Dojo"] = CFrame.new(5743.319, 1206.91, 936.011),
+    ["Candy Island"] = CFrame.new(-1014.424, 149.111, -14555.963),
+    ["Peanut Island"] = CFrame.new(-2062.748, 50.474, -10232.568),
+    ["Ice Cream Island"] = CFrame.new(-902.568, 79.932, -10988.848),
+    ["Floating Turtle"] = CFrame.new(-13274.528, 531.821, -7579.223),
+    ["Two Snow Mountain"] = CFrame.new(753.143, 408.236, -5274.615),
+    ["Punk Hazard"] = CFrame.new(-1503.622, 219.796, 1369.31),
+    ["Factory"] = CFrame.new(424.127, 211.162, -427.54),
+    ["The Cafe"] = CFrame.new(-380.479, 77.22, 255.826),
+    ["Dark Area"] = CFrame.new(5127.128, 59.501, 4105.446),
+    ["Fountain City"] = CFrame.new(-5247.716, 12.884, 8504.969),
+    ["Magma Village"] = CFrame.new(-4914.821, 50.964, 4281.028),
+    ["MarineFord"] = CFrame.new(1347.807, 104.668, -1319.737),
+    ["Snow Island"] = CFrame.new(-1181.309, 4.751, 3803.546)
+}
+
+local ada_isimleri = {}
+for isim, _ in pairs(adalar) do
+    table.insert(ada_isimleri, isim)
+end
+table.sort(ada_isimleri)
+
+local islandDropdown = tabs.main:AddDropdown("IslandSelector", {
+    Title = "gitmek istediğin adayı seç",
+    Values = ada_isimleri,
+    CurrentValue = nil,
+    Callback = function(value)
+        secilen_ada_cframe = adalar[value]
+        fluent:Notify({
+            Title = "hedef kilitlendi",
+            Content = value .. " adası rota olarak ayarlandı koçum.",
+            Duration = 3
+        })
+    end
+})
+
+tabs.main:AddToggle("flyToggle", {
+    Title = "300 hızla adaya fişekle",
+    Description = "seçtiğin adaya doğru x, y, z ekseninde uçmaya başlarsın.",
+    Default = false,
+    Callback = function(state)
+        uciyor_muyuz = state
+        
+        if uciyor_muyuz then
+            if not secilen_ada_cframe then
+                fluent:Notify({ Title = "hata", Content = "önce dropdown'dan bir ada seç lan!", Duration = 3 })
+                return
+            end
+            
+            fluent:Notify({ Title = "yolculuk başladı", Content = "300 hızla yardırıyoruz, sıkı tutun.", Duration = 3 })
+            
+            baglanti = runService.Heartbeat:Connect(function(dt)
+                local char = localPlayer.Character
+                if char and char:FindFirstChild("HumanoidRootPart") and secilen_ada_cframe then
+                    local hrp = char.HumanoidRootPart
+                    
+                    -- haritaya gömülme diye tam koordinatın 150 stud yukarısını hedef alıyoruz
+                    local hedef_pozisyon = secilen_ada_cframe.Position + Vector3.new(0, 150, 0)
+                    local gitme_yonu = (hedef_pozisyon - hrp.Position).Unit
+                    
+                    -- düşüş hızı sıfırlama titremeyi engeller
+                    hrp.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
+                    
+                    -- 300 hızla uçuş
+                    hrp.CFrame = hrp.CFrame + (gitme_yonu * (300 * dt))
+                    
+                    -- varış kontrolü
+                    if (hedef_pozisyon - hrp.Position).Magnitude < 30 then
+                        uciyor_muyuz = false
+                        if baglanti then baglanti:Disconnect() end
+                        fluent:Notify({ Title = "vardık", Content = "adaya ulaştın reis, toggle kapandı.", Duration = 3 })
+                    end
+                end
+            end)
+        else
+            if baglanti then
+                baglanti:Disconnect()
+                baglanti = nil
+            end
+        end
+    end
+})
+
+fluent:Notify({
+    Title = "kutsal harita hazır",
+    Content = "senin koordinatlarla her şey tıkırında.",
+    Duration = 5
+})
