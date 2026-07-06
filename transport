@@ -10,7 +10,7 @@ local window = fluent:CreateWindow({
     SubTitle = "300 hızla nokta atışı koordinat",
     TabWidth = 160,
     Size = UDim2.fromOffset(500, 380),
-    Acrylic = true,
+    Acrylic = false,
     Theme = "Dark"
 })
 
