@@ -9,7 +9,7 @@ local window = fluent:CreateWindow({
     SubTitle = "v565 - uçuş modlu npc katliamı",
     TabWidth = 130,
     Size = UDim2.fromOffset(350, 260),
-    Acrylic = true,
+    Acrylic = false,
     Theme = "Dark",
     MinimizeKey = Enum.KeyCode.LeftControl
 })
