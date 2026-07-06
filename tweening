@@ -12,7 +12,7 @@ local window = fluent:CreateWindow({
     SubTitle = "3d uçuş simülatörü v3",
     TabWidth = 160,
     Size = UDim2.fromOffset(500, 350),
-    Acrylic = true,
+    Acrylic = false,
     Theme = "Dark"
 })
 
