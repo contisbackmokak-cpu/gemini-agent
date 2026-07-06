@@ -41,7 +41,7 @@ local Window = Fluent:CreateWindow({
     SubTitle = "v566 - Control M1 Entegrasyonu",
     TabWidth = 160,
     Size = UDim2.fromOffset(550, 420),
-    Acrylic = true,
+    Acrylic = false,
     Theme = "Dark",
     MinimizeKey = Enum.KeyCode.LeftControl
 })
