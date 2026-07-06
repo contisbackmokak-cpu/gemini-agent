@@ -1,0 +1,62 @@
+local runservice = game:GetService("RunService")
+local players = game:GetService("Players")
+local workspace = game:GetService("Workspace")
+local localplayer = players.LocalPlayer
+local kamera = workspace.CurrentCamera
+
+-- fluent ui'yi çekiyoruz
+local fluent = loadstring(game:HttpGet("https://github.com/dawid-scripts/Fluent/releases/latest/download/main.lua"))()
+
+local window = fluent:CreateWindow({
+    Title = "nurullah'ın hız testi",
+    SubTitle = "3d uçuş simülatörü v3",
+    TabWidth = 160,
+    Size = UDim2.fromOffset(500, 350),
+    Acrylic = true,
+    Theme = "Dark"
+})
+
+local tabs = {
+    main = window:AddTab({ Title = "yardır", Icon = "rbxassetid://10888331510" })
+}
+
+local uciyor_muyuz = false
+local baglanti = nil
+
+tabs.main:AddToggle("hizToggle", {
+    Title = "gerçek uçuş modu (300 hız)",
+    Description = "kameranın baktığı her yöne (x, y, z) mermi gibi uçarsın.",
+    Default = false,
+    Callback = function(state)
+        uciyor_muyuz = state
+        
+        if uciyor_muyuz then
+            baglanti = runservice.Heartbeat:Connect(function(dt)
+                local char = localplayer.Character
+                if char and char:FindFirstChild("HumanoidRootPart") then
+                    local hrp = char.HumanoidRootPart
+                    
+                    -- buradaki sihir kameranın lookvector'ünde. y ekseni dahil her yeri kapsar.
+                    local yon = kamera.CFrame.LookVector
+                    
+                    -- karakterin hızını her eksende sıfırlayalım ki yerçekimi seni aşağı çekmeye çalışıp titretmesin
+                    hrp.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
+                    
+                    -- kameranın baktığı yöne doğru 300 hızla pozisyonu güncelliyoruz
+                    hrp.CFrame = hrp.CFrame + (yon * (300 * dt))
+                end
+            end)
+        else
+            if baglanti then
+                baglanti:Disconnect()
+                baglanti = nil
+            end
+        end
+    end
+})
+
+fluent:Notify({
+    Title = "başarılı",
+    Content = "y ekseni aktif edildi koçum. kamerayı nereye çevirirsen oraya uçarsın.",
+    Duration = 5
+})
