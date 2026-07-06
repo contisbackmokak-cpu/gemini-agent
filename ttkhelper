@@ -8,7 +8,7 @@ local Window = Fluent:CreateWindow({
     SubTitle = "Legendary Sword Dealer Finder",
     TabWidth = 160,
     Size = UDim2.fromOffset(500, 320),
-    Acrylic = true,
+    Acrylic = false,
     Theme = "Dark",
     MinimizeKey = Enum.KeyCode.LeftControl
 })
