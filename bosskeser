@@ -9,7 +9,7 @@ local window = fluent:CreateWindow({
     SubTitle = "v566 - alttan suikast",
     TabWidth = 130,
     Size = UDim2.fromOffset(380, 320),
-    Acrylic = true,
+    Acrylic = false,
     Theme = "Dark",
     MinimizeKey = Enum.KeyCode.LeftControl
 })
