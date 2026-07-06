@@ -36,7 +36,7 @@ local Window = Fluent:CreateWindow({
     SubTitle = "v565.4 - godhuman mutlak kilit",
     TabWidth = 160,
     Size = UDim2.fromOffset(550, 420),
-    Acrylic = true,
+    Acrylic = false,
     Theme = "Dark",
     MinimizeKey = Enum.KeyCode.LeftControl
 })
